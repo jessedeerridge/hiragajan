@@ -667,6 +667,21 @@
   }
   .pon-tray.hidden{ display:none !important; }
 
+  .pon-tray.self-action-tray{
+    position:fixed;
+    left:50%;
+    z-index:750;
+    pointer-events:auto;
+  }
+  .pon-tray.self-action-tray.helper-mode{
+    bottom:110px;
+    transform:translateX(-50%);
+  }
+  .pon-tray.self-action-tray.tsumo-mode{
+    top:50%;
+    transform:translate(-50%, -50%);
+  }
+
   .pon-slot{
     width:calc(var(--tileW) * 1.25);
     height:calc(var(--tileH) * 1.25);
@@ -788,6 +803,11 @@
     font-weight:900;
     font-size:14px;
   }
+  .pon-pick-actions.self-actions .btn{
+    width:auto;
+    padding:6px 8px;
+    font-size:13px;
+  }
 
   /* ✅ All buttons except Cancel = semi-transparent by default */
   .call-action{
@@ -836,7 +856,7 @@
   .meld-area.slot-left  { left:4%; bottom:16%; }
   .meld-area.slot-right{ --meld-rotate: 90deg; }
   .meld-area.slot-top{ --meld-rotate: 180deg; }
-  .meld-area.slot-left{ --meld-rotate: -90deg; }
+  .meld-area.slot-left{ --meld-rotate: 90deg; }
 
   .meld-group{ display:flex; gap:var(--tileGap); align-items:center; justify-content:flex-end; }
 
@@ -1018,6 +1038,15 @@
           </div>
         </div>
 
+        <div id="selfActionTray" class="pon-tray self-action-tray hidden" aria-hidden="true"></div>
+
+        <div id="selfActionButtons" class="pon-pick-actions self-actions hidden" aria-hidden="true">
+          <button id="btnSelfLayout233" class="btn ghost call-action">2.3..</button>
+          <button id="btnSelfLayout222" class="btn ghost call-action">2.2..</button>
+          <button id="btnSelfTsumo" class="btn ghost call-action">ツモ</button>
+          <button id="btnSelfCancel" class="btn ghost">キャンセル</button>
+        </div>
+
         <div id="myRack" class="my-rack" aria-label="自分の手牌">
           <div id="myLeft" class="rack-group left" aria-label="手牌（左）"></div>
           <div id="myRackGap" class="rack-gap hidden" aria-hidden="true"></div>
@@ -1153,6 +1182,16 @@ const state = {
     ronLastInsertIndex: null
   },
 
+  // ✅ Self pick state (Tsumo/公開)
+  selfPick: {
+    active: false,
+    slots: [],
+    dragging: null,
+    variant: 'std',        // 'std' | '7pairs'
+    lastInsertIndex: null
+  },
+  selfHelperActive: false,
+
   ronTimer: null,
   ronRevealTimer: null,
   ronHandledKey: null,
@@ -1219,6 +1258,13 @@ const btnPonPickConfirm = document.getElementById('btnPonPickConfirm');
 const btnPickReset = document.getElementById('btnPickReset');
 const btnPickKan = document.getElementById('btnPickKan');
 const btnPickRon = document.getElementById('btnPickRon');
+
+const selfActionTray = document.getElementById('selfActionTray');
+const selfActionButtons = document.getElementById('selfActionButtons');
+const btnSelfLayout233 = document.getElementById('btnSelfLayout233');
+const btnSelfLayout222 = document.getElementById('btnSelfLayout222');
+const btnSelfTsumo = document.getElementById('btnSelfTsumo');
+const btnSelfCancel = document.getElementById('btnSelfCancel');
 
 // Ron/reveal UI
 const ronPop = document.getElementById('ronPop');
@@ -1306,6 +1352,7 @@ const HELP_ITEMS = [
   { name: "着席", text: "席（1〜4）を選ぶとプレイヤーになります。観戦もできます。" },
   { name: "捨て牌", text: "自分の番に中央へドラッグで捨て牌。\n捨て牌は（捨てた本人以外に）2秒だけ中央に拡大表示され、クリックした人がCall（早い者勝ち）できます。\n誰も押さなければ自動で次の人がツモ。" },
   { name: "Pon/Kan/Ron", text: "中央の拡大捨て牌をクリック（早い者勝ち）→ claimした人だけスロットが出ます。\nPon: 3枠 / Kan: 4枠。\nRon: 2,3,3,3,3（またはトグルで 2,2,2,2,2,2,2）。\nReset: スロット・手牌・捨て牌を元の状態へ戻します。\n※このデモでは本来の麻雀ルール判定はしません（条件チェックなし）。" },
+  { name: "ツモ/公開", text: "捨て牌クリック以外では下部に 2.3.. / 2.2.. / ツモ ボタンが表示されます（ツモは自分の番のみ）。\nツモで点線枠が出て自動配置（右端は空ける）。\n枠が埋まったらツモボタンが黒塗り、埋まっていない時は ↻ツモ(7) ↔ ↻ツモ で切替。\n公開アクションはロンと同じ表示です。" },
 ];
 
 function renderHelpList(){
@@ -1771,7 +1818,7 @@ function iMustDiscardNow(){
   return (state.game.mustDiscardSeat === state.seatedSeat) && isMyTurn();
 }
 function updateDiscardPromptUI(){
-  const on = iMustDiscardNow() && !state.ponPick.active && !isPonWindowActive();
+  const on = iMustDiscardNow() && !state.ponPick.active && !state.selfPick.active && !isPonWindowActive();
   if (on){
     centerPrompt.classList.add('on');
     myRack.classList.add('discard-pulse');
@@ -1979,6 +2026,7 @@ function renderTable(){
   renderMelds();
   updateScaleVars();
   updateDiscardPromptUI();
+  updateSelfActionUI();
 }
 
 /* ============================
@@ -2088,6 +2136,8 @@ function renderMyHand(){
     myLeft.innerHTML = '';
     myRight.innerHTML = '';
     myRackGap.classList.add('hidden');
+    if (state.selfPick.active) resetSelfPick();
+    if (state.selfHelperActive) deactivateSelfHelper();
     updateScaleVars();
     updateDiscardPromptUI();
     return;
@@ -2133,6 +2183,9 @@ function renderMyHand(){
 
   if (state.ponPick.active){
     syncPonUsedMarks();
+  }
+  if (state.selfPick.active){
+    syncSelfUsedMarks();
   }
 
   // winner fall for local rack
@@ -2242,6 +2295,15 @@ function attachTileDrag(tileEl){
       const t = tiles.find(x => x.id === id);
       if (!t) return;
       startPonPickDrag({ kind:'hand', id:t.id, code:t.code }, { origin:'hand', handId:t.id }, e);
+      e.preventDefault();
+      return;
+    }
+    if (state.selfPick.active && !state.ponPick.active){
+      const id = tileEl.dataset.id;
+      const tiles = getMyTiles();
+      const t = tiles.find(x => x.id === id);
+      if (!t) return;
+      startSelfPickDrag({ kind:'hand', id:t.id, code:t.code }, { origin:'hand', handId:t.id }, e);
       e.preventDefault();
       return;
     }
@@ -2408,6 +2470,11 @@ function getUsedHandIdsInPonSlots(){
     .filter(x => x && x.kind === 'hand' && x.id)
     .map(x => x.id);
 }
+function getUsedHandIdsInSelfSlots(){
+  return state.selfPick.slots
+    .filter(x => x && x.kind === 'hand' && x.id)
+    .map(x => x.id);
+}
 function clearPonUsedMarks(){
   for (const el of [...myRack.querySelectorAll('.tile.pon-used')]){
     el.classList.remove('pon-used');
@@ -2419,6 +2486,17 @@ function clearPonUsedMarks(){
 function syncPonUsedMarks(){
   clearPonUsedMarks();
   const usedIds = new Set(getUsedHandIdsInPonSlots());
+  for (const id of usedIds){
+    const el = myRack.querySelector(`.tile[data-id="${CSS.escape(id)}"]`);
+    if (el){
+      el.classList.add('pon-used');
+      el.classList.add('pon-drag-hide');
+    }
+  }
+}
+function syncSelfUsedMarks(){
+  clearPonUsedMarks();
+  const usedIds = new Set(getUsedHandIdsInSelfSlots());
   for (const id of usedIds){
     const el = myRack.querySelector(`.tile[data-id="${CSS.escape(id)}"]`);
     if (el){
@@ -2458,6 +2536,22 @@ function computeRonGroups(){
   return [2, ...Array(trip).fill(3)];
 }
 
+function computeSelfGroups(){
+  const meldCount = getMyMeldCountForRon();
+  if (state.selfPick.variant === '7pairs' && canUseRonSevenPairs()){
+    const totalNeeded = Math.max(0, 14 - 3*meldCount);
+    const pairs = Math.max(0, Math.floor(totalNeeded / 2));
+    return Array(pairs).fill(2);
+  }
+  const trip = Math.max(0, 4 - meldCount);
+  return [2, ...Array(trip).fill(3)];
+}
+
+function computeSelfLayout(){
+  const groups = computeSelfGroups();
+  return { type:'ron', groups, slotCount: groups.reduce((a,b)=>a+b,0) };
+}
+
 function computePickLayout(){
   const mode = state.ponPick.mode;
   if (mode === 'kan') return { type:'kan', slotCount: 4 };
@@ -2489,6 +2583,51 @@ function resetPickSlotsToOriginal(){
   updateActionButtons();
 }
 
+function resetSelfPickSlotsToOriginal(){
+  const layout = computeSelfLayout();
+  const total = layout.slotCount;
+  const handTiles = getMyTiles().map(t => ({ kind:'hand', id:t.id, code:t.code }));
+  const useN = Math.max(0, total - 1); // leave one empty on the right
+  const slots = Array(total).fill(null);
+  for (let i=0;i<Math.min(useN, handTiles.length);i++){
+    slots[i] = handTiles[i];
+  }
+  state.selfPick.slots = slots;
+  state.selfPick.lastInsertIndex = null;
+  renderSelfSlots();
+  syncSelfUsedMarks();
+  updateSelfActionButtons();
+}
+
+function resetSelfPick(){
+  if (state.selfPick.dragging){
+    finishSelfPickDrag(true);
+  }
+
+  state.selfPick.active = false;
+  state.selfPick.slots = [];
+  state.selfPick.dragging = null;
+  state.selfPick.lastInsertIndex = null;
+
+  selfActionTray.classList.add('hidden');
+  selfActionTray.setAttribute('aria-hidden','true');
+  clearPonUsedMarks();
+  selfActionTray.innerHTML = '';
+  updateSelfActionButtons();
+}
+
+function startSelfPickSession(){
+  state.selfPick.active = true;
+  state.selfHelperActive = false;
+  if (state.selfPick.variant === '7pairs' && !canUseRonSevenPairs()){
+    state.selfPick.variant = 'std';
+  }
+  selfActionTray.classList.remove('hidden');
+  selfActionTray.setAttribute('aria-hidden','false');
+  resetSelfPickSlotsToOriginal();
+  updateSelfActionUI();
+}
+
 function anySlotHasTile(){
   return state.ponPick.slots.some(Boolean);
 }
@@ -2510,6 +2649,47 @@ function toggleRonVariant(){
   state.ponPick.ronVariant = (state.ponPick.ronVariant === 'std') ? '7pairs' : 'std';
   resetPickSlotsToOriginal();
   updateActionButtons();
+}
+
+function setSelfVariant(variant){
+  state.selfPick.variant = (variant === '7pairs' && canUseRonSevenPairs()) ? '7pairs' : 'std';
+  if (state.selfPick.active){
+    resetSelfPickSlotsToOriginal();
+  } else {
+    updateSelfActionButtons();
+  }
+}
+
+function toggleSelfVariant(){
+  if (!canUseRonSevenPairs()) return;
+  state.selfPick.variant = (state.selfPick.variant === 'std') ? '7pairs' : 'std';
+  resetSelfPickSlotsToOriginal();
+  updateSelfActionButtons();
+}
+
+function deactivateSelfHelper(){
+  state.selfHelperActive = false;
+  if (!state.selfPick.active){
+    state.selfPick.slots = [];
+    selfActionTray.innerHTML = '';
+  }
+}
+
+function toggleSelfHelper(variant){
+  const nextVariant = (variant === '7pairs' && canUseRonSevenPairs()) ? '7pairs' : 'std';
+  const sameVariant = state.selfPick.variant === nextVariant;
+  if (state.selfHelperActive && sameVariant){
+    deactivateSelfHelper();
+    updateSelfActionUI();
+    return;
+  }
+  state.selfPick.variant = nextVariant;
+  state.selfHelperActive = true;
+  state.selfPick.active = false;
+  const layout = computeSelfLayout();
+  state.selfPick.slots = Array(layout.slotCount).fill(null);
+  renderSelfSlots();
+  updateSelfActionUI();
 }
 
 function resetPonPick(){
@@ -2539,6 +2719,7 @@ function resetPonPick(){
   updateActionButtons();
   updateCenterDiscardVisibility();
   updateDiscardPromptUI();
+  updateSelfActionUI();
 }
 
 function startPonPickSession(discardObj){
@@ -2557,6 +2738,7 @@ function startPonPickSession(discardObj){
   myRack.classList.add('pon-pulse');
 
   updateDiscardPromptUI();
+  updateSelfActionUI();
 
   resetPickSlotsToOriginal();
 }
@@ -2637,12 +2819,88 @@ function renderPonSlots(){
   updateActionButtons();
 }
 
+function getSelfSlots(){
+  return [...selfActionTray.querySelectorAll('.pon-slot')];
+}
+
+function renderSelfSlots(){
+  const layout = computeSelfLayout();
+
+  selfActionTray.innerHTML = '';
+
+  const row = document.createElement('div');
+  row.className = 'ron-row';
+
+  const groups = layout.groups || [];
+  let globalIndex = 0;
+
+  for (let g=0; g<groups.length; g++){
+    const group = document.createElement('div');
+    group.className = 'ron-group';
+
+    const n = groups[g];
+    for (let i=0;i<n;i++){
+      const slot = document.createElement('div');
+      slot.className = 'pon-slot';
+      slot.dataset.slot = String(globalIndex);
+      group.appendChild(slot);
+      globalIndex++;
+    }
+    row.appendChild(group);
+
+    if (g < groups.length - 1){
+      const div = document.createElement('div');
+      div.className = 'ron-divider';
+      row.appendChild(div);
+    }
+  }
+
+  selfActionTray.appendChild(row);
+
+  const slots = getSelfSlots();
+  for (let i=0;i<slots.length;i++){
+    const el = slots[i];
+    el.innerHTML = '';
+
+    const item = state.selfPick.slots[i];
+    if (!item) continue;
+
+    const t = document.createElement('div');
+    t.className = 'pon-slot-tile';
+    t.textContent = item.code;
+    t.dataset.kind = item.kind;
+    t.dataset.id = item.id;
+    t.dataset.slot = String(i);
+
+    t.addEventListener('pointerdown', (e) => {
+      if (!state.selfPick.active) return;
+      startSelfPickDrag(item, { origin:'slot', slotIndex:i }, e);
+      e.preventDefault();
+    }, {passive:false});
+
+    el.appendChild(t);
+  }
+
+  updateSelfActionButtons();
+}
+
 function clearSlotOver(){
   for (const s of getPonSlots()) s.classList.remove('over');
+}
+function clearSelfSlotOver(){
+  for (const s of getSelfSlots()) s.classList.remove('over');
 }
 
 function slotIndexAtPoint(x,y){
   const slots = getPonSlots();
+  for (let i=0;i<slots.length;i++){
+    const r = slots[i].getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return i;
+  }
+  return null;
+}
+function slotIndexAtPointSelf(x,y){
+  const slots = getSelfSlots();
   for (let i=0;i<slots.length;i++){
     const r = slots[i].getBoundingClientRect();
     if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return i;
@@ -2708,6 +2966,41 @@ function startPonPickDrag(item, origin, e){
   window.addEventListener('pointercancel', onPonPickCancel, {passive:false});
 }
 
+function startSelfPickDrag(item, origin, e){
+  if (!item) return;
+  if (!state.selfPick.active) return;
+  if (state.selfPick.dragging) return;
+
+  if (origin?.origin === 'slot' && Number.isInteger(origin.slotIndex)){
+    state.selfPick.slots[origin.slotIndex] = null;
+    renderSelfSlots();
+
+    if (item.kind === 'hand' && item.id){
+      hideHandTileById(item.id, true);
+    }
+  }
+
+  if (origin?.origin === 'hand' && origin.handId){
+    hideHandTileById(origin.handId, true);
+  }
+
+  const { floatWrap, offX, offY } = buildPonFloat(item);
+
+  state.selfPick.dragging = {
+    item: { ...item },
+    origin: origin || { origin:'unknown' },
+    pointerId: e.pointerId,
+    offX, offY,
+    floatEl: floatWrap
+  };
+
+  movePonFloat(e.clientX, e.clientY);
+
+  window.addEventListener('pointermove', onSelfPickMove, {passive:false});
+  window.addEventListener('pointerup', onSelfPickUp, {passive:false});
+  window.addEventListener('pointercancel', onSelfPickCancel, {passive:false});
+}
+
 function movePonFloat(x,y){
   const d = state.ponPick.dragging;
   if (!d || !d.floatEl) return;
@@ -2725,6 +3018,22 @@ function onPonPickMove(e){
   clearSlotOver();
   if (idx !== null){
     getPonSlots()[idx].classList.add('over');
+  }
+
+  e.preventDefault();
+}
+
+function onSelfPickMove(e){
+  const d = state.selfPick.dragging;
+  if (!d) return;
+  if (e.pointerId !== d.pointerId) return;
+
+  movePonFloat(e.clientX, e.clientY);
+
+  const idx = slotIndexAtPointSelf(e.clientX, e.clientY);
+  clearSelfSlotOver();
+  if (idx !== null){
+    getSelfSlots()[idx].classList.add('over');
   }
 
   e.preventDefault();
@@ -2749,6 +3058,25 @@ function finishPonPickDrag(forceRestore=false){
   window.removeEventListener('pointercancel', onPonPickCancel);
 }
 
+function finishSelfPickDrag(forceRestore=false){
+  const d = state.selfPick.dragging;
+  state.selfPick.dragging = null;
+
+  clearSelfSlotOver();
+
+  if (d?.floatEl){
+    try{ d.floatEl.remove(); }catch{}
+  }
+
+  if (forceRestore && d){
+    restoreSelfDraggedOrigin(d);
+  }
+
+  window.removeEventListener('pointermove', onSelfPickMove);
+  window.removeEventListener('pointerup', onSelfPickUp);
+  window.removeEventListener('pointercancel', onSelfPickCancel);
+}
+
 function restoreDraggedOrigin(d){
   const origin = d.origin || {};
   if (origin.origin === 'slot' && Number.isInteger(origin.slotIndex)){
@@ -2766,6 +3094,20 @@ function restoreDraggedOrigin(d){
   syncPonUsedMarks();
   updateActionButtons();
   updateCenterDiscardVisibility();
+}
+
+function restoreSelfDraggedOrigin(d){
+  const origin = d.origin || {};
+  if (origin.origin === 'slot' && Number.isInteger(origin.slotIndex)){
+    state.selfPick.slots[origin.slotIndex] = d.item;
+    renderSelfSlots();
+  }
+  if (origin.origin === 'hand' && origin.handId){
+    hideHandTileById(origin.handId, false);
+  }
+
+  syncSelfUsedMarks();
+  updateSelfActionButtons();
 }
 
 function insertDiscardWithReflow(toIdx, movingDiscard){
@@ -2835,6 +3177,25 @@ function placeDraggedItemToSlot(d, toIdx){
   updateCenterDiscardVisibility();
 }
 
+function placeSelfDraggedItemToSlot(d, toIdx){
+  const origin = d.origin || {};
+  const moving = d.item;
+
+  const existing = state.selfPick.slots[toIdx] ? { ...state.selfPick.slots[toIdx] } : null;
+
+  state.selfPick.slots[toIdx] = { ...moving };
+
+  if (existing){
+    if (origin.origin === 'slot' && Number.isInteger(origin.slotIndex)){
+      state.selfPick.slots[origin.slotIndex] = existing;
+    }
+  }
+
+  renderSelfSlots();
+  syncSelfUsedMarks();
+  updateSelfActionButtons();
+}
+
 function onPonPickUp(e){
   const d = state.ponPick.dragging;
   if (!d) return;
@@ -2851,11 +3212,35 @@ function onPonPickUp(e){
   e.preventDefault();
 }
 
+function onSelfPickUp(e){
+  const d = state.selfPick.dragging;
+  if (!d) return;
+  if (e.pointerId !== d.pointerId) return;
+
+  const toIdx = slotIndexAtPointSelf(e.clientX, e.clientY);
+  if (toIdx !== null){
+    placeSelfDraggedItemToSlot(d, toIdx);
+    finishSelfPickDrag(false);
+  } else {
+    finishSelfPickDrag(true);
+  }
+
+  e.preventDefault();
+}
+
 function onPonPickCancel(e){
   const d = state.ponPick.dragging;
   if (!d) return;
   if (e.pointerId !== d.pointerId) return;
   finishPonPickDrag(true);
+  e.preventDefault();
+}
+
+function onSelfPickCancel(e){
+  const d = state.selfPick.dragging;
+  if (!d) return;
+  if (e.pointerId !== d.pointerId) return;
+  finishSelfPickDrag(true);
   e.preventDefault();
 }
 
@@ -2887,8 +3272,18 @@ function areRonSlotsFilled(){
   return !!slots.length && slots.every(Boolean);
 }
 
+function areSelfSlotsFilled(){
+  const slots = state.selfPick.slots;
+  return !!slots.length && slots.every(Boolean);
+}
+
 function isRonPairsLayout(){
   const groups = computeRonGroups();
+  return groups.length > 0 && groups.every(n => n === 2);
+}
+
+function isSelfPairsLayout(){
+  const groups = computeSelfGroups();
   return groups.length > 0 && groups.every(n => n === 2);
 }
 
@@ -2908,6 +3303,18 @@ function getRonButtonLabel(){
     return slotsFilled ? 'RON(7)' : '↻RON(normal)';
   }
   return slotsFilled ? 'RON' : '↻RON(7)';
+}
+
+function getSelfTsumoLabel(){
+  if (!state.selfPick.active){
+    return 'ツモ';
+  }
+  const slotsFilled = areSelfSlotsFilled();
+  const pairsLayout = isSelfPairsLayout();
+  if (slotsFilled){
+    return pairsLayout ? 'ツモ(7)' : 'ツモ';
+  }
+  return pairsLayout ? '↻ツモ' : '↻ツモ(7)';
 }
 
 function updateActionButtons(){
@@ -2934,6 +3341,69 @@ function updateActionButtons(){
   btnPickRon.classList.toggle('ready', active && state.ponPick.mode === 'ron' && readyRon());
 
   btnPickRon.textContent = getRonButtonLabel();
+}
+
+function updateSelfActionButtons(){
+  const active = state.selfPick.active;
+  const canPairs = canUseRonSevenPairs();
+
+  btnSelfLayout233.classList.toggle('call-action', true);
+  btnSelfLayout222.classList.toggle('call-action', true);
+  btnSelfTsumo.classList.toggle('call-action', true);
+
+  btnSelfLayout233.classList.toggle('active', state.selfPick.variant === 'std');
+  btnSelfLayout222.classList.toggle('active', state.selfPick.variant === '7pairs');
+
+  btnSelfLayout222.disabled = !canPairs;
+
+  btnSelfTsumo.classList.toggle('ready', active && areSelfSlotsFilled());
+  btnSelfTsumo.textContent = getSelfTsumoLabel();
+}
+
+function canShowSelfActions(){
+  if (!state.seatedSeat) return false;
+  const pc = state.game?.pendingCall;
+  if (pc && pc.type === 'pon' && (pc.status === 'waiting' || pc.status === 'claimed')) return false;
+  return !state.ponPick.active;
+}
+
+function updateSelfActionUI(){
+  const show = canShowSelfActions();
+  if (!show){
+    selfActionButtons.classList.add('hidden');
+    selfActionButtons.setAttribute('aria-hidden','true');
+    if (state.selfPick.active) resetSelfPick();
+    if (state.selfHelperActive){
+      deactivateSelfHelper();
+    }
+    return;
+  }
+
+  if (!isMyTurn() && state.selfPick.active){
+    resetSelfPick();
+  }
+
+  selfActionButtons.classList.remove('hidden');
+  selfActionButtons.setAttribute('aria-hidden','false');
+
+  if (isMyTurn()){
+    btnSelfTsumo.classList.remove('hidden');
+  } else {
+    btnSelfTsumo.classList.add('hidden');
+  }
+
+  if (state.selfPick.active || state.selfHelperActive){
+    selfActionTray.classList.remove('hidden');
+    selfActionTray.setAttribute('aria-hidden','false');
+    selfActionTray.classList.toggle('tsumo-mode', state.selfPick.active);
+    selfActionTray.classList.toggle('helper-mode', !state.selfPick.active);
+  } else {
+    selfActionTray.classList.add('hidden');
+    selfActionTray.setAttribute('aria-hidden','true');
+    selfActionTray.classList.remove('tsumo-mode', 'helper-mode');
+  }
+
+  updateSelfActionButtons();
 }
 
 /* ============================
@@ -2991,20 +3461,27 @@ function handlePendingCallUI(){
   const g = state.game;
   const pc = g?.pendingCall;
 
+  if (pc && state.selfPick.active){
+    resetSelfPick();
+  }
+
   if (!pc || pc.type !== 'pon'){
     if (state.focusVisible) hideFocusDiscard();
     updateDiscardPromptUI();
+    updateSelfActionUI();
     return;
   }
 
   if (!hasFocusUI){
     updateDiscardPromptUI();
+    updateSelfActionUI();
     return;
   }
 
   if (pc.discard?.byPlayerId && pc.discard.byPlayerId === state.userId){
     if (state.focusVisible) hideFocusDiscard();
     updateDiscardPromptUI();
+    updateSelfActionUI();
     return;
   }
 
@@ -3016,6 +3493,7 @@ function handlePendingCallUI(){
     if (!iAmClaimer){
       if (state.focusVisible) hideFocusDiscard();
       updateDiscardPromptUI();
+      updateSelfActionUI();
       return;
     }
 
@@ -3031,6 +3509,7 @@ function handlePendingCallUI(){
       syncPonUsedMarks();
       updateActionButtons();
     }
+    updateSelfActionUI();
     return;
   }
 
@@ -3052,11 +3531,13 @@ function handlePendingCallUI(){
       if (state.focusVisible) hideFocusDiscard();
     }
     updateDiscardPromptUI();
+    updateSelfActionUI();
     return;
   }
 
   if (state.focusVisible) hideFocusDiscard();
   updateDiscardPromptUI();
+  updateSelfActionUI();
 }
 
 if (focusTile){
@@ -3167,6 +3648,51 @@ btnPickReset.addEventListener('click', () => {
   if (!state.ponPick.active || !iAmPonClaimer()) return;
   // Reset = return hand tiles and discard tile to original positions
   resetPickSlotsToOriginal();
+});
+
+btnSelfLayout233.addEventListener('click', () => {
+  if (!canShowSelfActions()) return;
+  if (state.selfPick.active){
+    setSelfVariant('std');
+    return;
+  }
+  toggleSelfHelper('std');
+});
+
+btnSelfLayout222.addEventListener('click', () => {
+  if (!canShowSelfActions()) return;
+  if (state.selfPick.active){
+    setSelfVariant('7pairs');
+    return;
+  }
+  toggleSelfHelper('7pairs');
+});
+
+btnSelfTsumo.addEventListener('click', async () => {
+  if (!canShowSelfActions()) return;
+  if (!isMyTurn()) return;
+
+  if (!state.selfPick.active){
+    startSelfPickSession();
+    return;
+  }
+
+  if (areSelfSlotsFilled()){
+    await confirmSelfTsumoNow();
+    return;
+  }
+
+  toggleSelfVariant();
+});
+
+btnSelfCancel.addEventListener('click', () => {
+  if (state.selfPick.active){
+    resetSelfPick();
+  }
+  if (state.selfHelperActive){
+    deactivateSelfHelper();
+  }
+  updateSelfActionUI();
 });
 
 async function cancelPonClaim(){
@@ -3525,6 +4051,58 @@ async function confirmRonNow(){
   if (state.focusVisible) hideFocusDiscard();
 
   updateDiscardPromptUI();
+}
+
+async function confirmSelfTsumoNow(){
+  if (!state.roomCode || !state.seatedSeat) return;
+  if (!areSelfSlotsFilled()) return;
+
+  // build handsBySeat from current local state (everyone's tiles are in /hands)
+  const tables = state.tables || {};
+  const hands = state.hands || {};
+  const handsBySeat = {};
+
+  for (const seatKey of SEAT_ORDER){
+    const pid = tables?.[seatKey]?.playerId;
+    if (!pid) continue;
+    const h = hands?.[pid]?.tiles;
+    if (!Array.isArray(h)) continue;
+    handsBySeat[seatKey] = normalizeTiles(h).map(t => t.code);
+  }
+
+  const winnerSeatKey = state.seatedSeat;
+  const winnerName = state.userName || '名無し';
+
+  const gameRef = ref(db, `rooms/${state.roomCode}/game`);
+  await runTransaction(gameRef, (g) => {
+    if (!g) return g;
+    if (g.ron) return g; // already ended
+    g.pendingCall = null;
+    g.mustDiscardSeat = null;
+
+    g.ron = {
+      at: Date.now(),
+      revealAt: Date.now() + 1500,
+      winnerSeatKey,
+      winnerId: state.userId,
+      winnerName,
+      variant: state.selfPick.variant,
+      type:'tsumo',
+      handsBySeat
+    };
+
+    g.lastAction = {
+      type:'tsumo',
+      bySeat: winnerSeatKey,
+      byId: state.userId,
+      at: Date.now()
+    };
+    return g;
+  });
+
+  resetSelfPick();
+  updateDiscardPromptUI();
+  updateSelfActionUI();
 }
 
 async function maybeHostResolveTimeout(){
