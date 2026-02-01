@@ -669,11 +669,17 @@
 
   .pon-tray.self-action-tray{
     position:fixed;
-    left:0;
-    right:0;
-    bottom:70px;
+    left:50%;
     z-index:750;
     pointer-events:auto;
+  }
+  .pon-tray.self-action-tray.helper-mode{
+    bottom:110px;
+    transform:translateX(-50%);
+  }
+  .pon-tray.self-action-tray.tsumo-mode{
+    top:50%;
+    transform:translate(-50%, -50%);
   }
 
   .pon-slot{
@@ -798,7 +804,9 @@
     font-size:14px;
   }
   .pon-pick-actions.self-actions .btn{
-    width:min(120px, calc(33.3% - 14px));
+    width:auto;
+    padding:6px 8px;
+    font-size:13px;
   }
 
   /* ✅ All buttons except Cancel = semi-transparent by default */
@@ -848,7 +856,7 @@
   .meld-area.slot-left  { left:4%; bottom:16%; }
   .meld-area.slot-right{ --meld-rotate: 90deg; }
   .meld-area.slot-top{ --meld-rotate: 180deg; }
-  .meld-area.slot-left{ --meld-rotate: -90deg; }
+  .meld-area.slot-left{ --meld-rotate: 90deg; }
 
   .meld-group{ display:flex; gap:var(--tileGap); align-items:center; justify-content:flex-end; }
 
@@ -1036,6 +1044,7 @@
           <button id="btnSelfLayout233" class="btn ghost call-action">2.3..</button>
           <button id="btnSelfLayout222" class="btn ghost call-action">2.2..</button>
           <button id="btnSelfTsumo" class="btn ghost call-action">ツモ</button>
+          <button id="btnSelfCancel" class="btn ghost">キャンセル</button>
         </div>
 
         <div id="myRack" class="my-rack" aria-label="自分の手牌">
@@ -1181,6 +1190,7 @@ const state = {
     variant: 'std',        // 'std' | '7pairs'
     lastInsertIndex: null
   },
+  selfHelperActive: false,
 
   ronTimer: null,
   ronRevealTimer: null,
@@ -1254,6 +1264,7 @@ const selfActionButtons = document.getElementById('selfActionButtons');
 const btnSelfLayout233 = document.getElementById('btnSelfLayout233');
 const btnSelfLayout222 = document.getElementById('btnSelfLayout222');
 const btnSelfTsumo = document.getElementById('btnSelfTsumo');
+const btnSelfCancel = document.getElementById('btnSelfCancel');
 
 // Ron/reveal UI
 const ronPop = document.getElementById('ronPop');
@@ -2126,6 +2137,7 @@ function renderMyHand(){
     myRight.innerHTML = '';
     myRackGap.classList.add('hidden');
     if (state.selfPick.active) resetSelfPick();
+    if (state.selfHelperActive) deactivateSelfHelper();
     updateScaleVars();
     updateDiscardPromptUI();
     return;
@@ -2606,12 +2618,14 @@ function resetSelfPick(){
 
 function startSelfPickSession(){
   state.selfPick.active = true;
+  state.selfHelperActive = false;
   if (state.selfPick.variant === '7pairs' && !canUseRonSevenPairs()){
     state.selfPick.variant = 'std';
   }
   selfActionTray.classList.remove('hidden');
   selfActionTray.setAttribute('aria-hidden','false');
   resetSelfPickSlotsToOriginal();
+  updateSelfActionUI();
 }
 
 function anySlotHasTile(){
@@ -2651,6 +2665,31 @@ function toggleSelfVariant(){
   state.selfPick.variant = (state.selfPick.variant === 'std') ? '7pairs' : 'std';
   resetSelfPickSlotsToOriginal();
   updateSelfActionButtons();
+}
+
+function deactivateSelfHelper(){
+  state.selfHelperActive = false;
+  if (!state.selfPick.active){
+    state.selfPick.slots = [];
+    selfActionTray.innerHTML = '';
+  }
+}
+
+function toggleSelfHelper(variant){
+  const nextVariant = (variant === '7pairs' && canUseRonSevenPairs()) ? '7pairs' : 'std';
+  const sameVariant = state.selfPick.variant === nextVariant;
+  if (state.selfHelperActive && sameVariant){
+    deactivateSelfHelper();
+    updateSelfActionUI();
+    return;
+  }
+  state.selfPick.variant = nextVariant;
+  state.selfHelperActive = true;
+  state.selfPick.active = false;
+  const layout = computeSelfLayout();
+  state.selfPick.slots = Array(layout.slotCount).fill(null);
+  renderSelfSlots();
+  updateSelfActionUI();
 }
 
 function resetPonPick(){
@@ -3334,6 +3373,9 @@ function updateSelfActionUI(){
     selfActionButtons.classList.add('hidden');
     selfActionButtons.setAttribute('aria-hidden','true');
     if (state.selfPick.active) resetSelfPick();
+    if (state.selfHelperActive){
+      deactivateSelfHelper();
+    }
     return;
   }
 
@@ -3350,12 +3392,15 @@ function updateSelfActionUI(){
     btnSelfTsumo.classList.add('hidden');
   }
 
-  if (state.selfPick.active){
+  if (state.selfPick.active || state.selfHelperActive){
     selfActionTray.classList.remove('hidden');
     selfActionTray.setAttribute('aria-hidden','false');
+    selfActionTray.classList.toggle('tsumo-mode', state.selfPick.active);
+    selfActionTray.classList.toggle('helper-mode', !state.selfPick.active);
   } else {
     selfActionTray.classList.add('hidden');
     selfActionTray.setAttribute('aria-hidden','true');
+    selfActionTray.classList.remove('tsumo-mode', 'helper-mode');
   }
 
   updateSelfActionButtons();
@@ -3607,12 +3652,20 @@ btnPickReset.addEventListener('click', () => {
 
 btnSelfLayout233.addEventListener('click', () => {
   if (!canShowSelfActions()) return;
-  setSelfVariant('std');
+  if (state.selfPick.active){
+    setSelfVariant('std');
+    return;
+  }
+  toggleSelfHelper('std');
 });
 
 btnSelfLayout222.addEventListener('click', () => {
   if (!canShowSelfActions()) return;
-  setSelfVariant('7pairs');
+  if (state.selfPick.active){
+    setSelfVariant('7pairs');
+    return;
+  }
+  toggleSelfHelper('7pairs');
 });
 
 btnSelfTsumo.addEventListener('click', async () => {
@@ -3630,6 +3683,16 @@ btnSelfTsumo.addEventListener('click', async () => {
   }
 
   toggleSelfVariant();
+});
+
+btnSelfCancel.addEventListener('click', () => {
+  if (state.selfPick.active){
+    resetSelfPick();
+  }
+  if (state.selfHelperActive){
+    deactivateSelfHelper();
+  }
+  updateSelfActionUI();
 });
 
 async function cancelPonClaim(){
