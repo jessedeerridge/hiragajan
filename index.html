@@ -783,15 +783,25 @@
   .pon-pick-actions.hidden{ display:none !important; }
   .pon-pick-actions .btn{
     width:min(150px, calc(33.3% - 14px));
-    padding:12px 14px;
+    padding:10px 0;
     border-radius:999px;
     font-weight:900;
     font-size:14px;
   }
 
   /* ✅ All buttons except Cancel = semi-transparent by default */
-  .call-action{ opacity:.45; }
-  .call-action.ready{ opacity:1; }
+  .call-action{
+    opacity:.45;
+    background:transparent;
+    color:#6b7280;
+    border-color:#d1d5db;
+  }
+  .call-action.ready{
+    opacity:1;
+    background:#111;
+    color:#fff;
+    border-color:#111;
+  }
   .call-action.active{ outline:2px solid rgba(17,17,17,.35); outline-offset:2px; opacity:1; }
   .call-action:disabled{ opacity:.45; }
 
@@ -808,17 +818,17 @@
   .meld-area{
     position:absolute;
     display:flex;
-    flex-direction:column;
-    gap:8px;
-    align-items:flex-end;
+    flex-direction:row;
+    gap:6px;
+    align-items:center;
     justify-content:flex-end;
     filter: drop-shadow(0 2px 6px rgba(0,0,0,.16));
   }
 
   .meld-area.slot-bottom{ right:6%; bottom:9.5%; }
-  .meld-area.slot-right { right:6%; top:10%; transform:rotate(-90deg); transform-origin:right top; }
-  .meld-area.slot-top   { left:6%; top:9%; transform:rotate(180deg); transform-origin:left top; }
-  .meld-area.slot-left  { left:6%; bottom:10%; transform:rotate(90deg); transform-origin:left bottom; }
+  .meld-area.slot-right { right:4%; top:16%; }
+  .meld-area.slot-top   { left:6%; top:6.5%; }
+  .meld-area.slot-left  { left:4%; bottom:16%; }
 
   .meld-group{ display:flex; gap:var(--tileGap); align-items:center; justify-content:flex-end; }
 
@@ -993,7 +1003,7 @@
           <!-- ✅ 追加: Reset / Kan / Ron を右に追加 -->
           <div id="ponPickActions" class="pon-pick-actions hidden" aria-hidden="true">
             <button id="btnPonPickCancel" class="btn ghost">Cancel</button>
-            <button id="btnPonPickConfirm" class="btn primary call-action">Pon</button>
+            <button id="btnPonPickConfirm" class="btn ghost call-action">Pon</button>
             <button id="btnPickReset" class="btn ghost call-action" disabled>Reset</button>
             <button id="btnPickKan" class="btn ghost call-action">Kan</button>
             <button id="btnPickRon" class="btn ghost call-action">Ron</button>
@@ -2421,9 +2431,13 @@ function getMyMeldCountForRon(){
   return melds.filter(m => m && (m.type === 'pon' || m.type === 'kan')).length;
 }
 
+function canUseRonSevenPairs(){
+  return getMyMeldCountForRon() === 0;
+}
+
 function computeRonGroups(){
   const meldCount = getMyMeldCountForRon();
-  if (state.ponPick.ronVariant === '7pairs'){
+  if (state.ponPick.ronVariant === '7pairs' && canUseRonSevenPairs()){
     const totalNeeded = Math.max(0, 14 - 3*meldCount);
     const pairs = Math.max(0, Math.floor(totalNeeded / 2));
     return Array(pairs).fill(2);
@@ -2469,6 +2483,9 @@ function anySlotHasTile(){
 
 function setPickMode(mode){
   state.ponPick.mode = mode;
+  if (mode === 'ron' && !canUseRonSevenPairs()){
+    state.ponPick.ronVariant = 'std';
+  }
   // entering ron resets to original auto layout; entering pon/kan resets empty
   resetPickSlotsToOriginal();
   // rack pulse on while active
@@ -2477,6 +2494,7 @@ function setPickMode(mode){
 }
 
 function toggleRonVariant(){
+  if (!canUseRonSevenPairs()) return;
   state.ponPick.ronVariant = (state.ponPick.ronVariant === 'std') ? '7pairs' : 'std';
   resetPickSlotsToOriginal();
   updateActionButtons();
@@ -2877,7 +2895,11 @@ function updateActionButtons(){
 
   // also show Ron label variant
   if (active && state.ponPick.mode === 'ron'){
-    btnPickRon.textContent = (state.ponPick.ronVariant === '7pairs') ? 'Ron (7)' : 'Ron';
+    if (canUseRonSevenPairs()){
+      btnPickRon.textContent = (state.ponPick.ronVariant === 'std') ? 'Ron7' : 'Ron';
+    } else {
+      btnPickRon.textContent = 'Ron';
+    }
   } else {
     btnPickRon.textContent = 'Ron';
   }
