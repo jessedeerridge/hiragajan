@@ -397,7 +397,7 @@
   .opp-hand.pos-top{
     left:50%;
     top:3.5%;
-    transform:translateX(-50%);
+    transform:translateX(calc(-50% + var(--opp-hand-shift-x, 0px)));
     flex-direction:row;
     gap:2px;
   }
@@ -413,7 +413,7 @@
   .opp-hand.pos-right{
     right:3.0%;
     top:50%;
-    transform:translateY(-50%);
+    transform:translateY(calc(-50% + var(--opp-hand-shift-y, 0px)));
     flex-direction:column;
   }
   .opp-hand.pos-right .opp-tile + .opp-tile{
@@ -427,7 +427,7 @@
   .opp-hand.pos-left{
     left:3.0%;
     top:50%;
-    transform:translateY(-50%);
+    transform:translateY(calc(-50% + var(--opp-hand-shift-y, 0px)));
     flex-direction:column;
   }
   .opp-hand.pos-left .opp-tile + .opp-tile{
@@ -441,7 +441,7 @@
   .opp-hand.pos-bottom{
     left:50%;
     bottom:16%;
-    transform:translateX(-50%);
+    transform:translateX(calc(-50% + var(--opp-hand-shift-x, 0px)));
     flex-direction:row;
   }
   .opp-hand.pos-bottom .opp-tile + .opp-tile{
@@ -1647,10 +1647,19 @@ function renderOppHand(slotKey, playerId){
   const wrap = document.createElement('div');
   wrap.className = `opp-hand ${slotClass(slotKey)}`;
 
+  const realSeatKey = VIEW_ORDER.find(rk => mapRealSeatToSlot(rk) === slotKey) || slotKey;
+  const baseCount = count + getOppMeldTilesCount(realSeatKey);
+  const shift = getOppHandShift(slotKey, count, baseCount);
+  if (shift.x){
+    wrap.style.setProperty('--opp-hand-shift-x', `${shift.x}px`);
+  }
+  if (shift.y){
+    wrap.style.setProperty('--opp-hand-shift-y', `${shift.y}px`);
+  }
+
   // ron fall visual
   const winnerSeat = state.game?.ron?.winnerSeatKey || null;
   if (winnerSeat){
-    const realSeatKey = VIEW_ORDER.find(rk => mapRealSeatToSlot(rk) === slotKey) || slotKey;
     if (realSeatKey === winnerSeat) wrap.classList.add('ron-fall');
   }
 
@@ -1661,6 +1670,70 @@ function renderOppHand(slotKey, playerId){
     wrap.appendChild(t);
   }
   oppHandsLayer.appendChild(wrap);
+}
+
+function getOppHandMetrics(){
+  if (state.oppHandMetrics) return state.oppHandMetrics;
+  const styles = getComputedStyle(document.documentElement);
+  const num = (name, fallback) => {
+    const value = parseFloat(styles.getPropertyValue(name));
+    return Number.isFinite(value) ? value : fallback;
+  };
+  state.oppHandMetrics = {
+    tileW: num('--oppTileW', 14),
+    tileH: num('--oppTileH', 20),
+    overlap: num('--oppOverlap', 4),
+    tileTopW: num('--oppTileTopW', 18),
+    topGap: 2
+  };
+  return state.oppHandMetrics;
+}
+
+function getOppMeldTilesCount(realSeatKey){
+  const melds = Array.isArray(state.game?.melds?.[realSeatKey]) ? state.game.melds[realSeatKey] : [];
+  return melds.reduce((sum, meld) => {
+    if (!meld) return sum;
+    if (Array.isArray(meld.tiles)) return sum + meld.tiles.length;
+    if (meld.type === 'kan') return sum + 4;
+    if (meld.type === 'pon') return sum + 3;
+    return sum;
+  }, 0);
+}
+
+function getOppHandShift(slotKey, count, baseCount){
+  if (!baseCount || baseCount <= count) return { x: 0, y: 0 };
+  const metrics = getOppHandMetrics();
+  const missing = baseCount - count;
+  if (missing <= 0) return { x: 0, y: 0 };
+
+  if (slotKey === 'E'){
+    const curW = metrics.tileTopW * count + Math.max(0, count - 1) * metrics.topGap;
+    const baseW = metrics.tileTopW * baseCount + Math.max(0, baseCount - 1) * metrics.topGap;
+    const diff = baseW - curW;
+    return { x: diff / 2, y: 0 };
+  }
+
+  if (slotKey === 'W'){
+    const spacing = metrics.tileW - metrics.overlap;
+    const curW = metrics.tileW + Math.max(0, count - 1) * spacing;
+    const baseW = metrics.tileW + Math.max(0, baseCount - 1) * spacing;
+    const diff = baseW - curW;
+    return { x: -diff / 2, y: 0 };
+  }
+
+  const spacing = metrics.tileH - metrics.overlap;
+  const curH = metrics.tileH + Math.max(0, count - 1) * spacing;
+  const baseH = metrics.tileH + Math.max(0, baseCount - 1) * spacing;
+  const diff = baseH - curH;
+
+  if (slotKey === 'S'){
+    return { x: 0, y: diff / 2 };
+  }
+  if (slotKey === 'N'){
+    return { x: 0, y: -diff / 2 };
+  }
+
+  return { x: 0, y: 0 };
 }
 
 function isMyTurn(){
