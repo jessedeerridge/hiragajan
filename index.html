@@ -514,10 +514,10 @@
     justify-content:flex-end;
   }
   .my-melds .meld-tile{
-    width:calc(var(--tileW) * 1.05);
-    height:calc(var(--tileH) * 1.05);
-    border-radius:calc(var(--tileRadius) * 1.05);
-    font-size:calc(var(--tileFont) * 0.95);
+    width:var(--tileW);
+    height:var(--tileH);
+    border-radius:var(--tileRadius);
+    font-size:var(--tileFont);
   }
   .my-melds .meld-tile.called{
     transform:none;
@@ -615,6 +615,10 @@
   .focus-backdrop.hidden{display:none;}
 
   .focus-tile-wrap{
+    position:absolute;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
     display:flex; flex-direction:column;
     gap:10px;
     align-items:center;
@@ -812,10 +816,10 @@
     filter: drop-shadow(0 2px 6px rgba(0,0,0,.16));
   }
 
-  .meld-area.slot-bottom{ right:6%; bottom:9.5%; }
-  .meld-area.slot-right { right:18.5%; top:52%; transform:translateY(-50%) rotate(-90deg); transform-origin:right center; }
-  .meld-area.slot-top   { left:52%; top:16.5%; transform:translateX(-50%) rotate(180deg); transform-origin:center top; }
-  .meld-area.slot-left  { left:18.5%; top:52%; transform:translateY(-50%) rotate(90deg); transform-origin:left center; }
+  .meld-area.slot-bottom{ right:8%; bottom:9.5%; }
+  .meld-area.slot-right { right:8%; top:14%; transform:rotate(-90deg); transform-origin:right top; }
+  .meld-area.slot-top   { left:14%; top:8%; transform:rotate(180deg); transform-origin:left top; }
+  .meld-area.slot-left  { left:8%; bottom:14%; transform:rotate(90deg); transform-origin:left bottom; }
 
   .meld-group{ display:flex; gap:var(--tileGap); align-items:center; justify-content:flex-end; }
 
@@ -838,13 +842,6 @@
     transform-origin:center;
   }
 
-  body.pon-focus .discard-area.pos-top   { transform:translate(-50%,-50%) rotate(0deg) !important; }
-  body.pon-focus .discard-area.pos-right { transform:translate(-50%,-50%) rotate(0deg) !important; }
-  body.pon-focus .discard-area.pos-left  { transform:translate(-50%,-50%) rotate(0deg) !important; }
-
-  body.pon-focus .meld-area.slot-right { right:6%; top:50%; transform:translateY(-50%) !important; }
-  body.pon-focus .meld-area.slot-left  { left:6%; top:50%;  transform:translateY(-50%) !important; }
-  body.pon-focus .meld-area.slot-top   { left:50%; top:7.5%; transform:translateX(-50%) !important; }
   body.pon-focus .meld-tile.called{ transform:none !important; }
   body.pon-focus .pon-slot-tile.called{ transform:none !important; }
 
@@ -1194,6 +1191,9 @@ const meldLayer = document.getElementById('meldLayer');
 
 const focusDiscardBackdrop = document.getElementById('focusDiscardBackdrop');
 const focusTile = document.getElementById('focusTile');
+const focusTileWrap = document.querySelector('.focus-tile-wrap');
+const mahjongTable = document.querySelector('.mahjong-table');
+const mainEl = document.querySelector('main');
 
 const ponTray = document.getElementById('ponTray');
 const ponPickActions = document.getElementById('ponPickActions');
@@ -2843,8 +2843,19 @@ function setFocusMode(on){
   else document.body.classList.remove('pon-focus');
 }
 
+function positionFocusTile(){
+  if (!focusTileWrap || !mahjongTable) return;
+  const rect = mahjongTable.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  focusTileWrap.style.left = `${cx}px`;
+  focusTileWrap.style.top = `${cy}px`;
+  focusTileWrap.style.transform = 'translate(-50%, -50%)';
+}
+
 function showFocusDiscard(code){
   focusTile.textContent = code || '';
+  positionFocusTile();
   focusDiscardBackdrop.classList.remove('hidden');
   state.focusVisible = true;
   setFocusMode(true);
@@ -2861,6 +2872,15 @@ function hideFocusDiscard(){
 
   setCenterDiscardVisible(true);
 }
+
+if (mainEl){
+  mainEl.addEventListener('scroll', () => {
+    if (state.focusVisible) positionFocusTile();
+  }, { passive:true });
+}
+window.addEventListener('resize', () => {
+  if (state.focusVisible) positionFocusTile();
+});
 
 function handlePendingCallUI(){
   const g = state.game;
