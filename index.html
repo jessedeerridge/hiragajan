@@ -514,10 +514,10 @@
     justify-content:flex-end;
   }
   .my-melds .meld-tile{
-    width:calc(var(--tileW) * 1.05);
-    height:calc(var(--tileH) * 1.05);
-    border-radius:calc(var(--tileRadius) * 1.05);
-    font-size:calc(var(--tileFont) * 0.95);
+    width:var(--tileW);
+    height:var(--tileH);
+    border-radius:var(--tileRadius);
+    font-size:var(--tileFont);
   }
   .my-melds .meld-tile.called{
     transform:none;
@@ -606,7 +606,7 @@
      CALL window: 中央拡大捨て牌（2秒）
      ========================= */
   .focus-backdrop{
-    position:fixed; inset:0;
+    position:absolute; inset:0;
     background:transparent;
     display:flex; align-items:center; justify-content:center;
     z-index:700;
@@ -813,9 +813,9 @@
   }
 
   .meld-area.slot-bottom{ right:6%; bottom:9.5%; }
-  .meld-area.slot-right { right:18.5%; top:52%; transform:translateY(-50%) rotate(-90deg); transform-origin:right center; }
-  .meld-area.slot-top   { left:52%; top:16.5%; transform:translateX(-50%) rotate(180deg); transform-origin:center top; }
-  .meld-area.slot-left  { left:18.5%; top:52%; transform:translateY(-50%) rotate(90deg); transform-origin:left center; }
+  .meld-area.slot-right { right:6%; top:10%; transform:rotate(-90deg); transform-origin:right top; }
+  .meld-area.slot-top   { left:6%; top:9%; transform:rotate(180deg); transform-origin:left top; }
+  .meld-area.slot-left  { left:6%; bottom:10%; transform:rotate(90deg); transform-origin:left bottom; }
 
   .meld-group{ display:flex; gap:var(--tileGap); align-items:center; justify-content:flex-end; }
 
@@ -838,13 +838,6 @@
     transform-origin:center;
   }
 
-  body.pon-focus .discard-area.pos-top   { transform:translate(-50%,-50%) rotate(0deg) !important; }
-  body.pon-focus .discard-area.pos-right { transform:translate(-50%,-50%) rotate(0deg) !important; }
-  body.pon-focus .discard-area.pos-left  { transform:translate(-50%,-50%) rotate(0deg) !important; }
-
-  body.pon-focus .meld-area.slot-right { right:6%; top:50%; transform:translateY(-50%) !important; }
-  body.pon-focus .meld-area.slot-left  { left:6%; top:50%;  transform:translateY(-50%) !important; }
-  body.pon-focus .meld-area.slot-top   { left:50%; top:7.5%; transform:translateX(-50%) !important; }
   body.pon-focus .meld-tile.called{ transform:none !important; }
   body.pon-focus .pon-slot-tile.called{ transform:none !important; }
 
@@ -985,6 +978,25 @@
         <div id="meldLayer" class="meld-layer" aria-hidden="true"></div>
         <div id="oppHandsLayer" class="opp-hands-layer" aria-hidden="true"></div>
 
+        <!-- ===== CALL: 中央拡大捨て牌 ===== -->
+        <div id="focusDiscardBackdrop" class="focus-backdrop hidden" role="dialog" aria-modal="true" aria-label="捨て牌（Call受付）">
+          <div class="focus-tile-wrap">
+            <div id="focusTile" class="focus-tile" title="クリックでCall（first come）"></div>
+            <div id="focusHint" class="focus-hint">Click (first come, first served)</div>
+
+            <div id="ponTray" class="pon-tray hidden" aria-hidden="true"></div>
+          </div>
+
+          <!-- ✅ 追加: Reset / Kan / Ron を右に追加 -->
+          <div id="ponPickActions" class="pon-pick-actions hidden" aria-hidden="true">
+            <button id="btnPonPickCancel" class="btn ghost">Cancel</button>
+            <button id="btnPonPickConfirm" class="btn primary call-action">Pon</button>
+            <button id="btnPickReset" class="btn ghost call-action" disabled>Reset</button>
+            <button id="btnPickKan" class="btn ghost call-action">Kan</button>
+            <button id="btnPickRon" class="btn ghost call-action">Ron</button>
+          </div>
+        </div>
+
         <div id="myRack" class="my-rack" aria-label="自分の手牌">
           <div id="myLeft" class="rack-group left" aria-label="手牌（左）"></div>
           <div id="myRackGap" class="rack-gap hidden" aria-hidden="true"></div>
@@ -1045,25 +1057,6 @@
   <div class="start-pop-actions">
     <button id="btnResetRoom" class="btn ghost">リセット</button>
     <button id="btnGameStart" class="btn primary">スタート</button>
-  </div>
-</div>
-
-<!-- ===== CALL: 中央拡大捨て牌 ===== -->
-<div id="focusDiscardBackdrop" class="focus-backdrop hidden" role="dialog" aria-modal="true" aria-label="捨て牌（Call受付）">
-  <div class="focus-tile-wrap">
-    <div id="focusTile" class="focus-tile" title="クリックでCall（first come）"></div>
-    <div id="focusHint" class="focus-hint">Click (first come, first served)</div>
-
-    <div id="ponTray" class="pon-tray hidden" aria-hidden="true"></div>
-  </div>
-
-  <!-- ✅ 追加: Reset / Kan / Ron を右に追加 -->
-  <div id="ponPickActions" class="pon-pick-actions hidden" aria-hidden="true">
-    <button id="btnPonPickCancel" class="btn ghost">Cancel</button>
-    <button id="btnPonPickConfirm" class="btn primary call-action">Pon</button>
-    <button id="btnPickReset" class="btn ghost call-action" disabled>Reset</button>
-    <button id="btnPickKan" class="btn ghost call-action">Kan</button>
-    <button id="btnPickRon" class="btn ghost call-action">Ron</button>
   </div>
 </div>
 
@@ -1194,6 +1187,7 @@ const meldLayer = document.getElementById('meldLayer');
 
 const focusDiscardBackdrop = document.getElementById('focusDiscardBackdrop');
 const focusTile = document.getElementById('focusTile');
+const hasFocusUI = !!(focusDiscardBackdrop && focusTile);
 
 const ponTray = document.getElementById('ponTray');
 const ponPickActions = document.getElementById('ponPickActions');
@@ -2844,6 +2838,7 @@ function setFocusMode(on){
 }
 
 function showFocusDiscard(code){
+  if (!hasFocusUI) return;
   focusTile.textContent = code || '';
   focusDiscardBackdrop.classList.remove('hidden');
   state.focusVisible = true;
@@ -2851,6 +2846,7 @@ function showFocusDiscard(code){
   setCenterDiscardVisible(true);
 }
 function hideFocusDiscard(){
+  if (!hasFocusUI) return;
   focusDiscardBackdrop.classList.add('hidden');
   state.focusVisible = false;
 
@@ -2868,6 +2864,11 @@ function handlePendingCallUI(){
 
   if (!pc || pc.type !== 'pon'){
     if (state.focusVisible) hideFocusDiscard();
+    updateDiscardPromptUI();
+    return;
+  }
+
+  if (!hasFocusUI){
     updateDiscardPromptUI();
     return;
   }
@@ -2929,27 +2930,29 @@ function handlePendingCallUI(){
   updateDiscardPromptUI();
 }
 
-focusTile.addEventListener('click', async () => {
-  const pc = state.game?.pendingCall;
-  if (pc?.type === 'pon' && pc.status === 'claimed' && iAmPonClaimer()) return;
-  await tryClaimPon();
-});
+if (focusTile){
+  focusTile.addEventListener('click', async () => {
+    const pc = state.game?.pendingCall;
+    if (pc?.type === 'pon' && pc.status === 'claimed' && iAmPonClaimer()) return;
+    await tryClaimPon();
+  });
 
-focusTile.addEventListener('pointerdown', (e) => {
-  if (!state.ponPick.active) return;
-  if (!iAmPonClaimer()) return;
-  if (!state.ponPick.discard?.code) return;
+  focusTile.addEventListener('pointerdown', (e) => {
+    if (!state.ponPick.active) return;
+    if (!iAmPonClaimer()) return;
+    if (!state.ponPick.discard?.code) return;
 
-  const di = getDiscardSlotIndex();
-  if (di !== -1){
-    const item = state.ponPick.slots[di];
-    if (!item) return;
-    startPonPickDrag(item, { origin:'slot', slotIndex: di }, e);
-  } else {
-    startPonPickDrag({ kind:'discard', id:'__discard__', code: state.ponPick.discard.code }, { origin:'center' }, e);
-  }
-  e.preventDefault();
-}, {passive:false});
+    const di = getDiscardSlotIndex();
+    if (di !== -1){
+      const item = state.ponPick.slots[di];
+      if (!item) return;
+      startPonPickDrag(item, { origin:'slot', slotIndex: di }, e);
+    } else {
+      startPonPickDrag({ kind:'discard', id:'__discard__', code: state.ponPick.discard.code }, { origin:'center' }, e);
+    }
+    e.preventDefault();
+  }, {passive:false});
+}
 
 async function tryClaimPon(){
   if (!state.roomCode || !state.seatedSeat) return;
