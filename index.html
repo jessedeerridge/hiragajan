@@ -817,18 +817,26 @@
   }
   .meld-area{
     position:absolute;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,.16));
+    --meld-rotate: 0deg;
+  }
+  .meld-area-inner{
     display:flex;
     flex-direction:row;
     gap:6px;
     align-items:center;
     justify-content:flex-end;
-    filter: drop-shadow(0 2px 6px rgba(0,0,0,.16));
+    transform:rotate(var(--meld-rotate));
+    transform-origin:center;
   }
 
   .meld-area.slot-bottom{ right:6%; bottom:9.5%; }
   .meld-area.slot-right { right:4%; top:16%; }
   .meld-area.slot-top   { left:6%; top:6.5%; }
   .meld-area.slot-left  { left:4%; bottom:16%; }
+  .meld-area.slot-right{ --meld-rotate: 90deg; }
+  .meld-area.slot-top{ --meld-rotate: 180deg; }
+  .meld-area.slot-left{ --meld-rotate: -90deg; }
 
   .meld-group{ display:flex; gap:var(--tileGap); align-items:center; justify-content:flex-end; }
 
@@ -1835,6 +1843,7 @@ function renderMelds(){
     const renderToMyRackRight = !!(state.seatedSeat && slotKey === 'W');
 
     const area = document.createElement('div');
+    let inner = null;
     if (renderToMyRackRight){
       area.className = '';
     } else {
@@ -1843,6 +1852,8 @@ function renderMelds(){
         slotKey === 'S' ? 'slot-right' :
         slotKey === 'E' ? 'slot-top' : 'slot-left'
       );
+      inner = document.createElement('div');
+      inner.className = 'meld-area-inner';
       // ron fall visual
       if (state.game?.ron?.winnerSeatKey === realSeatKey) area.classList.add('ron-fall');
     }
@@ -1879,11 +1890,12 @@ function renderMelds(){
       if (renderToMyRackRight){
         myMelds.appendChild(group);
       } else {
-        area.appendChild(group);
+        inner.appendChild(group);
       }
     }
 
     if (!renderToMyRackRight){
+      area.appendChild(inner);
       meldLayer.appendChild(area);
     }
   }
@@ -2870,6 +2882,34 @@ function readyRon(){
   return hasDiscard;
 }
 
+function areRonSlotsFilled(){
+  const slots = state.ponPick.slots;
+  return !!slots.length && slots.every(Boolean);
+}
+
+function isRonPairsLayout(){
+  const groups = computeRonGroups();
+  return groups.length > 0 && groups.every(n => n === 2);
+}
+
+function getRonButtonLabel(){
+  if (!state.ponPick.active){
+    return 'RON';
+  }
+  if (state.ponPick.mode !== 'ron'){
+    return canUseRonSevenPairs() ? 'RON/RON(7)' : 'RON';
+  }
+  if (!canUseRonSevenPairs()){
+    return 'RON';
+  }
+  const slotsFilled = areRonSlotsFilled();
+  const pairsLayout = isRonPairsLayout();
+  if (pairsLayout){
+    return slotsFilled ? 'RON(7)' : '↻RON(normal)';
+  }
+  return slotsFilled ? 'RON' : '↻RON(7)';
+}
+
 function updateActionButtons(){
   const active = state.ponPick.active;
 
@@ -2893,16 +2933,7 @@ function updateActionButtons(){
   btnPickKan.classList.toggle('ready', active && state.ponPick.mode === 'kan' && readyKan());
   btnPickRon.classList.toggle('ready', active && state.ponPick.mode === 'ron' && readyRon());
 
-  // also show Ron label variant
-  if (active && state.ponPick.mode === 'ron'){
-    if (canUseRonSevenPairs()){
-      btnPickRon.textContent = (state.ponPick.ronVariant === 'std') ? 'Ron7' : 'Ron';
-    } else {
-      btnPickRon.textContent = 'Ron';
-    }
-  } else {
-    btnPickRon.textContent = 'Ron';
-  }
+  btnPickRon.textContent = getRonButtonLabel();
 }
 
 /* ============================
