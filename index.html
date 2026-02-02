@@ -674,8 +674,16 @@
     pointer-events:auto;
   }
   .pon-tray.self-action-tray.helper-mode{
-    bottom:110px;
+    position:absolute;
+    left:50%;
+    bottom:5.5%;
     transform:translateX(-50%);
+    width:94%;
+    padding:var(--rackPad);
+    margin-top:0;
+    box-sizing:border-box;
+    pointer-events:none;
+    z-index:7;
   }
   .pon-tray.self-action-tray.tsumo-mode{
     top:50%;
@@ -743,6 +751,34 @@
     border-radius:999px;
     background:rgba(0,0,0,.18);
     flex:0 0 auto;
+  }
+  .self-action-tray.helper-mode .ron-row{
+    justify-content:flex-start;
+    gap:var(--tileGap);
+    width:100%;
+    max-width:none;
+  }
+  .self-action-tray.helper-mode .ron-group{
+    border:2px dashed rgba(17,17,17,.35);
+    border-radius:12px;
+    padding:2px;
+    gap:var(--tileGap);
+    background:rgba(255,255,255,.18);
+  }
+  .self-action-tray.helper-mode .ron-divider{
+    display:none;
+  }
+  .self-action-tray.helper-mode .pon-slot{
+    width:var(--tileW);
+    height:var(--tileH);
+    border:0;
+    background:transparent;
+    box-shadow:none;
+  }
+  .self-action-tray.helper-mode .pon-slot-tile{
+    width:100%;
+    height:100%;
+    font-size:var(--tileFont);
   }
   /* Ron slots shrink to fit within row */
   .ron-row .pon-slot{
