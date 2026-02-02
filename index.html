@@ -2169,15 +2169,12 @@ if (!useFrames){
     myLeft.appendChild(el);
   });
 } else {
-  // 2.2: (2)(2)(2)(2)(2)(2)(2)
-  // 2.3: (2)(3)(3)(3)(3)  ※ first frame=2, then frames=3
+  // 2.2: group by 2
+  // 2.3: group by 3
   let idx = 0;
-  let frameIndex = 0;
 
   while (idx < left.length){
-    const size =
-      (state.handFrameMode === 'pairs') ? 2 :
-      (frameIndex === 0 ? 2 : 3);
+    const size = (state.handFrameMode === 'pairs') ? 2 : 3;
 
     const frame = document.createElement('div');
     frame.className = 'hand-frame';
@@ -2200,7 +2197,6 @@ if (!useFrames){
     }
 
     myLeft.appendChild(frame);
-    frameIndex++;
   }
 }
 
@@ -2589,7 +2585,7 @@ function setPickMode(mode){
   }
 // ✅ default framing to match Ron layout
 if (mode === 'ron'){
-  state.handFrameMode = (state.ponPick.ronVariant === '7pairs') ? 'pairs' : 'standard';
+  state.handFrameMode = (state.ponPick.ronVariant === '7pairs') ? 'pairs' : 'triplets';
 } else {
   state.handFrameMode = 'none';
 }
@@ -3042,7 +3038,7 @@ if (btnFrame22 && btnFrame23){
   btnFrame23.classList.toggle('hidden', !showRonHelpers);
 
   btnFrame22.classList.toggle('active', showRonHelpers && state.handFrameMode === 'pairs');
-  btnFrame23.classList.toggle('active', showRonHelpers && state.handFrameMode === 'standard');
+  btnFrame23.classList.toggle('active', showRonHelpers && state.handFrameMode === 'triplets');
 }
 }
 if (btnFrame22){
@@ -3059,7 +3055,7 @@ if (btnFrame23){
   btnFrame23.addEventListener('click', () => {
     if (!state.ponPick.active || !iAmPonClaimer()) return;
     if (state.ponPick.mode !== 'ron') return;
-    state.handFrameMode = 'standard';  // ✅ 2.3
+    state.handFrameMode = 'triplets';  // ✅ 2.3
     renderMyHand();
     updateActionButtons();
   });
