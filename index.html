@@ -1,5 +1,4 @@
-
-<!DOCTYPE html>  
+<!DOCTYPE html> 
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
@@ -476,11 +475,29 @@
     align-items:flex-end;
     overflow:visible;
   }
-  .rack-group.left{
-    gap:var(--tileGap);
-    flex:0 1 auto;
-    min-width:0;
-  }
+.rack-group.left{
+  gap:var(--tileGap);
+  flex:0 1 auto;
+  min-width:0;
+}
+
+/* ✅ hand framing helpers (2.2 / 2.3) */
+.rack-group.left.hand-frames{
+  gap:8px;               /* gap between frames */
+}
+
+.hand-frame{
+  display:flex;
+  align-items:flex-end;
+  gap:var(--tileGap);    /* gap between tiles inside a frame */
+  padding:2px 3px;
+  border-radius:12px;
+  border:2px solid rgba(255,255,255,.28);
+  background:rgba(0,0,0,.10);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+  overflow:visible;
+}
+
   .rack-gap{
     width:var(--newLeadGap);
     height:1px;
@@ -962,6 +979,25 @@
     font-weight:1000;
     font-size:16px;
   }
+
+/* ====== Hand helper (frames around my hand tiles) ====== */
+.hand-helper-layer{
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  z-index:60; /* myRackの上 */
+}
+.hand-helper-layer.hidden{ display:none; }
+
+.hand-helper-box{
+  position:absolute;
+  border:2px dashed rgba(17,17,17,.55);
+  border-radius:10px;
+  box-shadow:0 8px 18px rgba(0,0,0,.10);
+  background:rgba(255,255,255,.12);
+}
+
+
 </style>
 </head>
 <body>
@@ -1009,13 +1045,18 @@
           </div>
 
           <!-- ✅ 追加: Reset / Kan / Ron を右に追加 -->
-          <div id="ponPickActions" class="pon-pick-actions hidden" aria-hidden="true">
-            <button id="btnPonPickCancel" class="btn ghost">Cancel</button>
-            <button id="btnPonPickConfirm" class="btn ghost call-action">Pon</button>
-            <button id="btnPickReset" class="btn ghost call-action" disabled>Reset</button>
-            <button id="btnPickKan" class="btn ghost call-action">Kan</button>
-            <button id="btnPickRon" class="btn ghost call-action">Ron</button>
-          </div>
+      <div id="ponPickActions" class="pon-pick-actions hidden" aria-hidden="true">
+  <button id="btnPonPickCancel" class="btn ghost">Cancel</button>
+  <button id="btnPonPickConfirm" class="btn ghost call-action">Pon</button>
+  <button id="btnPickReset" class="btn ghost call-action" disabled>Reset</button>
+  <button id="btnPickKan" class="btn ghost call-action">Kan</button>
+  <button id="btnPickRon" class="btn ghost call-action">Ron</button>
+
+  <!-- ✅ helpers (shown only in Ron mode) -->
+  <button id="btnFrame22" class="btn ghost call-action hidden">2.2</button>
+  <button id="btnFrame23" class="btn ghost call-action hidden">2.3</button>
+</div>
+
         </div>
 
         <div id="myRack" class="my-rack" aria-label="自分の手牌">
@@ -1024,6 +1065,8 @@
           <div id="myRight" class="rack-group right" aria-label="新牌（右）"></div>
 
           <div id="myMelds" class="my-melds" aria-hidden="true"></div>
+  <div id="handHelper" class="hand-helper-layer hidden" aria-hidden="true"></div>
+
         </div>
       </div>
 
@@ -1150,7 +1193,8 @@ const state = {
     dragging: null,
     mode: 'pon',           // 'pon' | 'kan' | 'ron'
     ronVariant: 'std',     // 'std' | '7pairs'
-    ronLastInsertIndex: null
+    ronLastInsertIndex: null,
+  handFrameMode: 'none',
   },
 
   ronTimer: null,
@@ -1220,6 +1264,9 @@ const btnPickReset = document.getElementById('btnPickReset');
 const btnPickKan = document.getElementById('btnPickKan');
 const btnPickRon = document.getElementById('btnPickRon');
 
+// ✅ helpers
+const btnFrame22 = document.getElementById('btnFrame22');
+const btnFrame23 = document.getElementById('btnFrame23');
 // Ron/reveal UI
 const ronPop = document.getElementById('ronPop');
 const revealBackdrop = document.getElementById('revealBackdrop');
@@ -2101,6 +2148,12 @@ function renderMyHand(){
   if (right.length > 0) myRackGap.classList.remove('hidden');
   else myRackGap.classList.add('hidden');
 
+// ✅ frame helpers apply only while Ron pick is active
+const useFrames = (state.ponPick.active && state.ponPick.mode === 'ron' && state.handFrameMode !== 'none');
+
+myLeft.classList.toggle('hand-frames', useFrames);
+
+if (!useFrames){
   left.forEach((t) => {
     const el = document.createElement('div');
     el.className = 'tile';
@@ -2115,6 +2168,42 @@ function renderMyHand(){
     attachTileDrag(el);
     myLeft.appendChild(el);
   });
+} else {
+  // 2.2: (2)(2)(2)(2)(2)(2)(2)
+  // 2.3: (2)(3)(3)(3)(3)  ※ first frame=2, then frames=3
+  let idx = 0;
+  let frameIndex = 0;
+
+  while (idx < left.length){
+    const size =
+      (state.handFrameMode === 'pairs') ? 2 :
+      (frameIndex === 0 ? 2 : 3);
+
+    const frame = document.createElement('div');
+    frame.className = 'hand-frame';
+
+    for (let k = 0; k < size && idx < left.length; k++, idx++){
+      const t = left[idx];
+
+      const el = document.createElement('div');
+      el.className = 'tile';
+      el.dataset.id = t.id;
+      el.textContent = t.code;
+
+      const sub = document.createElement('div');
+      sub.className = 'sub';
+      sub.textContent = '';
+      el.appendChild(sub);
+
+      attachTileDrag(el);
+      frame.appendChild(el);
+    }
+
+    myLeft.appendChild(frame);
+    frameIndex++;
+  }
+}
+
 
   right.forEach((t) => {
     const el = document.createElement('div');
@@ -2498,8 +2587,16 @@ function setPickMode(mode){
   if (mode === 'ron' && !canUseRonSevenPairs()){
     state.ponPick.ronVariant = 'std';
   }
-  // entering ron resets to original auto layout; entering pon/kan resets empty
-  resetPickSlotsToOriginal();
+// ✅ default framing to match Ron layout
+if (mode === 'ron'){
+  state.handFrameMode = (state.ponPick.ronVariant === '7pairs') ? 'pairs' : 'standard';
+} else {
+  state.handFrameMode = 'none';
+}
+
+// entering ron resets to original auto layout; entering pon/kan resets empty
+resetPickSlotsToOriginal();
+
   // rack pulse on while active
   myRack.classList.add('pon-pulse');
   updateActionButtons();
@@ -2523,10 +2620,13 @@ function resetPonPick(){
   state.ponPick.dragging = null;
   state.ponPick.mode = 'pon';
   state.ponPick.ronVariant = 'std';
-  state.ponPick.ronLastInsertIndex = null;
+state.ponPick.ronLastInsertIndex = null;
 
-  clearSlotOver();
-  ponTray.classList.add('hidden');
+// ✅ reset framing
+state.handFrameMode = 'none';
+
+clearSlotOver();
+ponTray.classList.add('hidden');
   ponTray.setAttribute('aria-hidden','true');
   ponPickActions.classList.add('hidden');
   ponPickActions.setAttribute('aria-hidden','true');
@@ -2933,7 +3033,36 @@ function updateActionButtons(){
   btnPickKan.classList.toggle('ready', active && state.ponPick.mode === 'kan' && readyKan());
   btnPickRon.classList.toggle('ready', active && state.ponPick.mode === 'ron' && readyRon());
 
-  btnPickRon.textContent = getRonButtonLabel();
+btnPickRon.textContent = getRonButtonLabel();
+
+// ✅ show helpers only when in Ron mode
+const showRonHelpers = active && state.ponPick.mode === 'ron';
+if (btnFrame22 && btnFrame23){
+  btnFrame22.classList.toggle('hidden', !showRonHelpers);
+  btnFrame23.classList.toggle('hidden', !showRonHelpers);
+
+  btnFrame22.classList.toggle('active', showRonHelpers && state.handFrameMode === 'pairs');
+  btnFrame23.classList.toggle('active', showRonHelpers && state.handFrameMode === 'standard');
+}
+}
+if (btnFrame22){
+  btnFrame22.addEventListener('click', () => {
+    if (!state.ponPick.active || !iAmPonClaimer()) return;
+    if (state.ponPick.mode !== 'ron') return;
+    state.handFrameMode = 'pairs';     // ✅ 2.2
+    renderMyHand();
+    updateActionButtons();
+  });
+}
+
+if (btnFrame23){
+  btnFrame23.addEventListener('click', () => {
+    if (!state.ponPick.active || !iAmPonClaimer()) return;
+    if (state.ponPick.mode !== 'ron') return;
+    state.handFrameMode = 'standard';  // ✅ 2.3
+    renderMyHand();
+    updateActionButtons();
+  });
 }
 
 /* ============================
@@ -3777,4 +3906,3 @@ updateDiscardPromptUI();
 
 </body>
 </html>
-
