@@ -21,6 +21,11 @@
   .hidden{display:none !important;}
   #lobby{padding:16px 12px 18px;border-top:1px solid #eee; position:relative; z-index:2;}
   .copy-btn.copied, .btn.ghost.copied{background:#16a34a;color:#fff;border-color:#16a34a;}
+  .btn.grouping-active{
+    background:#111;
+    color:#fff;
+    border-color:#111;
+  }
 
   main{
     position:relative;
@@ -475,6 +480,16 @@
     display:flex;
     align-items:flex-end;
     overflow:visible;
+  }
+  .hand-group{
+    display:flex;
+    align-items:flex-end;
+    gap:var(--tileGap);
+    padding:calc(var(--tileGap) * 0.5);
+    border-radius:calc(var(--tileRadius) * 0.75);
+    border:2px solid rgba(255,255,255,.85);
+    box-shadow:inset 0 0 0 1px rgba(17,17,17,.25);
+    background:rgba(255,255,255,.08);
   }
   .rack-group.left{
     gap:var(--tileGap);
@@ -970,6 +985,7 @@
   <h1>麻雀（かな牌）</h1>
   <div style="display:flex;align-items:center;gap:6px;">
     <div class="small" id="roomInfo"></div>
+    <button class="btn ghost" id="btnGroupMode" title="手牌ハイライト 2/3" aria-pressed="false">2.3</button>
     <button class="btn ghost" id="copyLinkBtn">COPY</button>
   </div>
 </header>
@@ -1138,6 +1154,11 @@ const state = {
   lastCallKey: null,
   callTimer: null,
 
+  handGroup: {
+    enabled: false,
+    size: 2,
+  },
+
   focusVisible: false,
   focusKey: null,
   ponExpiryTimer: null,
@@ -1168,6 +1189,7 @@ const btnJoin = document.getElementById('btnJoin');
 const lobby = document.getElementById('lobby');
 const roomInfo = document.getElementById('roomInfo');
 const roomInfoLobby = document.getElementById('roomInfoLobby');
+const btnGroupMode = document.getElementById('btnGroupMode');
 const copyLinkBtn = document.getElementById('copyLinkBtn');
 
 const seatPop = document.getElementById('seatPop');
@@ -1301,6 +1323,25 @@ function updateHostUI(){
   }
   helpBtn.classList.add('visible');
 }
+
+function updateHandGroupButton(){
+  if (!btnGroupMode) return;
+  btnGroupMode.classList.toggle('grouping-active', state.handGroup.enabled);
+  const label = state.handGroup.size === 2 ? '2枚ずつ' : '3枚ずつ';
+  btnGroupMode.title = `手牌ハイライト: ${label}`;
+  btnGroupMode.setAttribute('aria-pressed', state.handGroup.enabled ? 'true' : 'false');
+}
+
+btnGroupMode.addEventListener('click', () => {
+  if (!state.handGroup.enabled){
+    state.handGroup.enabled = true;
+    state.handGroup.size = 2;
+  } else {
+    state.handGroup.size = state.handGroup.size === 2 ? 3 : 2;
+  }
+  updateHandGroupButton();
+  renderMyHand();
+});
 
 const HELP_ITEMS = [
   { name: "着席", text: "席（1〜4）を選ぶとプレイヤーになります。観戦もできます。" },
@@ -2083,6 +2124,42 @@ function splitMyTiles(){
   return { tiles, left, right };
 }
 
+function createHandTileElement(tile, isNew){
+  const el = document.createElement('div');
+  el.className = `tile${isNew ? ' new' : ''}`;
+  el.dataset.id = tile.id;
+  el.textContent = tile.code;
+
+  const sub = document.createElement('div');
+  sub.className = 'sub';
+  sub.textContent = '';
+  el.appendChild(sub);
+
+  attachTileDrag(el);
+  return el;
+}
+
+function appendHandTiles(container, tiles, isNew){
+  if (!state.handGroup.enabled){
+    tiles.forEach((tile) => {
+      container.appendChild(createHandTileElement(tile, isNew));
+    });
+    return;
+  }
+
+  const groupSize = Math.max(1, state.handGroup.size);
+  for (let i = 0; i < tiles.length; i += groupSize){
+    const group = document.createElement('div');
+    group.className = 'hand-group';
+
+    tiles.slice(i, i + groupSize).forEach((tile) => {
+      group.appendChild(createHandTileElement(tile, isNew));
+    });
+
+    container.appendChild(group);
+  }
+}
+
 function renderMyHand(){
   if (!state.seatedSeat){
     myLeft.innerHTML = '';
@@ -2101,35 +2178,8 @@ function renderMyHand(){
   if (right.length > 0) myRackGap.classList.remove('hidden');
   else myRackGap.classList.add('hidden');
 
-  left.forEach((t) => {
-    const el = document.createElement('div');
-    el.className = 'tile';
-    el.dataset.id = t.id;
-    el.textContent = t.code;
-
-    const sub = document.createElement('div');
-    sub.className = 'sub';
-    sub.textContent = '';
-    el.appendChild(sub);
-
-    attachTileDrag(el);
-    myLeft.appendChild(el);
-  });
-
-  right.forEach((t) => {
-    const el = document.createElement('div');
-    el.className = 'tile new';
-    el.dataset.id = t.id;
-    el.textContent = t.code;
-
-    const sub = document.createElement('div');
-    sub.className = 'sub';
-    sub.textContent = '';
-    el.appendChild(sub);
-
-    attachTileDrag(el);
-    myRight.appendChild(el);
-  });
+  appendHandTiles(myLeft, left, false);
+  appendHandTiles(myRight, right, true);
 
   if (state.ponPick.active){
     syncPonUsedMarks();
@@ -3772,6 +3822,7 @@ btnResetRoom.addEventListener('click', async () => {
 
 /* 初期 */
 renderMyHand();
+updateHandGroupButton();
 updateDiscardPromptUI();
 </script>
 
